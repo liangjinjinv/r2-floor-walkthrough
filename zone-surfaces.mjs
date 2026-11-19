@@ -1,7 +1,6 @@
 import {walls} from './arch.mjs';
 
-// Proposed finishes only, independent of the structural trace and door/window schedule.
-// Bounds are drawn in R2 plan coordinates. The walk line begins at 0.023 m.
+
 const themes={
  forecourt:{col:[0xb1b4ad,0xb7b9b1,0xbcbeb7,0xc1c1b7],sx:17,sy:17,seam:.035,wall:0xccc7bc,base:0x777e7c},
  entry:{col:[0xbfbab1,0xc5c0b5,0xc9c3b8,0xc6bfb3],sx:18,sy:17,seam:.018,wall:0xe1d9ce,base:0x766957, accent:0xc6ac94},
@@ -35,7 +34,7 @@ const bounds=[
  [616,528,659,621,'outdoor'], [661,527,765,768,'outdoor'],
  [709,326,761,370,'lift'],
 ];
-// All suggested finishes stay on known solid-wall faces. No overlays are applied to glazing or door apertures.
+
 function boundaryRuns(w,zone) {
  const [x,y,X,Y]=w,[a,b,c,d]=zone, eps=4.8, runs=[];
  if(Math.abs(Y-y)<.8){
@@ -52,27 +51,27 @@ function boundaryRuns(w,zone) {
  return runs;
 }
 export const zoneSurfaceMapping={1:'室外浅灰石材',2:'迎宾通道浅灰石材与暖灰墙',3:'门厅水磨石、浅色墙与暖木饰面',4:'展廊浅灰铺地、局部线性展墙',5:'主展厅水磨石与暖灰墙面',6:'主展厅水磨石与局部暖木墙面',7:'店面耐磨地坪与中性绿灰墙',8:'前置仓耐磨地坪与中性绿灰墙',9:'骑手／顾客区耐磨地坪与易清洁墙脚',10:'展廊浅灰地坪；观察窗保留',11:'上线区工业灰地坪',12:'装配线工业灰地坪',13:'线尾工业灰地坪',15:'表演区齐平灰色地坪与浅中性墙面',16:'回转区暖灰仿石地面',17:'街区酒店暖木色板纹与暖灰石面过渡',18:'住宅场景中性暖灰石面',19:'街区小广场浅暖灰板块铺地',20:'街门通道深浅石材过渡',21:'室外广场浅灰外铺，原图窗门独立',22:'候梯区浅灰地坪及中性耐磨墙面'};
-export function addZoneSurfaces({box,line,face,solid,xyz,sc}){
+export function addZoneSurfaces({box,line,face,solid,xyz,sc,wallPlan=walls}){
  const plane=(a,b,c,d,z,col)=>face(solid,[xyz(a,b,z),xyz(c,b,z),xyz(c,d,z),xyz(a,d,z)],col,1,1);
  const runs=new Map();
  for(let iz=0;iz<bounds.length;iz++){
   const zone=bounds[iz],[a,b,c,d,key]=zone,{col,sx,sy,seam,wall,base,accent}=themes[key];
   const nx=Math.max(1,Math.round((c-a)/sx)),ny=Math.max(1,Math.round((d-b)/sy));
   const dx=(c-a)/nx,dy=(d-b)/ny,top=.0226;
-  // An opaque mortar layer fills the joint: this never covers the red route marks.
+
   plane(a,b,c,d,.019,base);
   for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
    const k=((i*13+j*7+i*j*3+9*iz)>>>0)%col.length;
    const u=a+i*dx,v=b+j*dy,p=seam/(2*sc);
    plane(u+p,v+p,u+dx-p,v+dy-p,top,col[k]);
   }
-  for(const w of walls){
+  for(const w of wallPlan){
    if(w[4]!=='wall')continue;
    for(const r of boundaryRuns(w,zone)){
     let[x,y,X,Y,ux,uy]=r;
     const len=Math.hypot(X-x,Y-y);if(len<7)continue;
     const ddx=(X-x)/len,ddy=(Y-y)/len;
-    // Trim end grain at doors and wall junctions; use a thin finish skin, not another wall.
+
     x+=ddx*.60;y+=ddy*.60;X-=ddx*.60;Y-=ddy*.60;
     const id=[x,y,X,Y,ux,uy].map(i=>i.toFixed(2)).join(',');
     if(runs.has(id))continue;runs.set(id,key);
@@ -97,11 +96,11 @@ export function addZoneSurfaces({box,line,face,solid,xyz,sc}){
    }
   }
  }
- // Shallow proposed décor attached to the verified north guestroom wall.
- // Does not add a partition, opening or furnished footprint.
+
+
  line(275,581,351,581,1.85,.48,0xb48a69,.067);
  for(let x=277;x<351;x+=4)box(x,581.43,.022,.036,1.83,.49,0xc89e7b);
- // Art is intentionally abstract and unbranded; mounting surface is the confirmed east gallery wall.
+
  for(const y of [1124,1148]){
   box(563.45,y,.062,.98,.70,1.42,0x775f4b);
   box(562.90,y,.034,.90,.62,1.46,0xf0e6d5);

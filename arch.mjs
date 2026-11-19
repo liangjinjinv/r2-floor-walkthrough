@@ -1,5 +1,5 @@
-// R2 plan traced for schematic visual review, not construction.
-// Main glazed entrance and labeled observation windows transcribed from readable PDF annotations; other glazing is unconfirmed.
+
+
 const groups=[
 [[54,170],[617,170]],[[655,170],[685,170],[685,249]],[[685,274],[685,479],[666,479]],
 [[616,479],[566,479],[566,514]],[[566,543],[566,572],[53,572]],

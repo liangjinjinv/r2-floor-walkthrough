@@ -1,4 +1,4 @@
-// C3 concept finishes only. Units and room envelope follow the existing R2 trace.
+
 export const cafeStops = [
   {label:'入口看吧台',eye:[424,736],look:[422,786],pitch:-.037,via:[[453,740]]},
   {label:'走到吧台侧',eye:[456,768],look:[424,783],pitch:-.095,via:[[456,809]]},
@@ -13,24 +13,23 @@ const glyphs={
 };
 export function addCafeFinish({box,round,face,solid,xyz,sc,roof}){
  const tx=371.8, ty=730.5, rx=467.25, by=839.6;
- // Warm stone tile geometry, with shallow joints and restrained natural variation.
+
  const layout=[0xb6afa3,0xc5bdb0,0xcbc2b3,0xc1b8aa,0xc7beaf];
  for(let j=0;j<11;j++)for(let i=0;i<10;i++){
   const dw=(rx-tx)/10,dh=(by-ty)/11;
   box(tx+(i+.5)*dw,ty+(j+.5)*dh,dw*sc-.013,dh*sc-.013,.012,.014,layout[(i*11+j*13+i*j*3)%layout.length]);
  }
- // Keep the existing 3D wall and every opening unchanged. Apply thin finish only to inside faces.
+
  box(371.65,784.4,.032,108.6*sc,2.93,.012,0xe3d7c7);
- box(466.62,784.4,.032,108.6*sc,2.93,.012,0xe5d9c9);
  box(419.6,839.87,94.7*sc,.036,2.95,.014,0xe7dac8);
- for(const x of [371.97,466.37])box(x,784.4,.04,108.5*sc,.10,.012,0xba9b80);
+ box(371.97,784.4,.04,108.5*sc,.10,.012,0xba9b80);
  box(419.8,839.56,95*sc,.04,.1,.012,0xc4a58a);
- // A finished ceiling in walking view; hidden in the site-wide cutaway.
+
  for(let j=0;j<7;j++)for(let i=0;i<6;i++){
   const x=371.2+i*16.1,y=729.6+j*15.95,X=x+16.1,Y=y+15.95;
   roof([xyz(x,y,2.95),xyz(x,Y,2.95),xyz(X,Y,2.95),xyz(X,y,2.95)],0xe6d9c7);
  }
- // Backdrop behind the furniture, applied on an existing wall, not a new partition.
+
  box(424,839.20,68*sc,.12,2.63,.04,0xb68769);
  for(let i=0;i<25;i++){
   const x=391.4+i*2.71;
@@ -51,7 +50,7 @@ export function addCafeFinish({box,round,face,solid,xyz,sc,roof}){
   }
   xCursor-=size*.99/sc;
  }
- // Three shallow drum pendants. The bottom diffuser and subtle light falloff are separate.
+
  for(const x of [408,423,438]){
   round(x,777,.035,.035,.045,2.906,0x635a52,0,12);
   round(x,777,.012,.012,.454,2.480,0x332b2a,0,8);

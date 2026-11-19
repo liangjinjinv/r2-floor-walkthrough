@@ -1,20 +1,25 @@
-import {walls,route,stops} from './arch.mjs';
+import {walls as tracedWalls,route,stops} from './arch.mjs';
 import {props} from './props.mjs';
 import {finishes} from './finish.mjs';
 import {makeCafeProp} from './cafe.mjs';
-import {addCafeFinish,cafeStops} from './cafe-finish.mjs';
-import {addZoneSurfaces} from './zone-surfaces.mjs';
+import {addCafeFinish,cafeStops} from './cafe-finish.mjs?v=r2-clear-glass';
+import {addZoneSurfaces} from './zone-surfaces.mjs?v=r2-clear-glass';
 import {makeZoneProp} from './zone-props.mjs';
 import {zoneViews} from './zone-views.mjs';
 import {addZoneLights,makeZoneTint} from './zone-light.mjs';
+import {BOX_LIMIT,createDetailWorld,maskCode,maskSetup} from './unified-detail.mjs?v=r2-clear-glass';
+import {createUnifiedCPU,makeUnifiedBaseMeshes} from './unified-cpu.mjs?v=r2-clear-glass';
+import {applyGlassWalls} from './glass-walls.mjs?v=r2-clear-glass';
 const $=x=>document.getElementById(x),cv=$('view'),gl=cv.getContext('webgl',{antialias:true,alpha:false});
+const walls=applyGlassWalls(tracedWalls);
 const sc=8.4/101,xyz=(x,y,h=0)=>[(x-395)*sc,h,(y-785)*sc];
 const rgb=c=>[(c>>16)/255,(c>>8&255)/255,(c&255)/255];
-const solid=[],trans=[],faces=[],ceiling=[],ceilingFaces=[];
+const solid=[],trans=[],faces=[],ceiling=[],ceilingFaces=[],essential=[];
+let keepPlanLeaf=false;
 function face(g,q,c,a,f){const cl=rgb(c).map(k=>k*f);faces.push([q,cl,a]);for(const n of [0,1,2,0,2,3])g.push(...q[n],...cl,a)}
 function box(x,y,w,d,h,z,c,ang=0,a=1){
  if(w<.001||d<.001)return;
- const g=a<1?trans:solid,co=Math.cos(ang),si=Math.sin(ang),p=xyz(x,y,z),v=[[-1,0,-1],[1,0,-1],[1,0,1],[-1,0,1],[-1,1,-1],[1,1,-1],[1,1,1],[-1,1,1]].map(([u,b,j])=>[p[0]+(u*w*co-j*d*si)/2,z+b*h,p[2]+(u*w*si+j*d*co)/2]);
+ const g=a<1?trans:keepPlanLeaf?essential:solid,co=Math.cos(ang),si=Math.sin(ang),p=xyz(x,y,z),v=[[-1,0,-1],[1,0,-1],[1,0,1],[-1,0,1],[-1,1,-1],[1,1,-1],[1,1,1],[-1,1,1]].map(([u,b,j])=>[p[0]+(u*w*co-j*d*si)/2,z+b*h,p[2]+(u*w*si+j*d*co)/2]);
  const shade=[[0,1,5,4,.83],[1,2,6,5,.72],[2,3,7,6,.88],[3,0,4,7,.8],[4,5,6,7,1],[0,3,2,1,.72]];
  const useSlices=h<3&&((x>370.5&&x<468&&y>729&&y<841)||(x>570&&x<615&&y>1018&&y<1030));
  for(const [i,j,k,l,f] of shade){
@@ -46,6 +51,17 @@ regions.forEach(([x,y,w,d,c],i)=>box(x+w/2,y+d/2,w*sc,d*sc,.007,.002+i*.0005,c))
 for(const [x,y,X,Y,k,leafMode,side=1] of walls){
  const len=Math.hypot(X-x,Y-y),a=Math.atan2(Y-y,X-x),cx=(x+X)/2,cy=(y+Y)/2;
  if(k==='wall')line(x,y,X,Y,2.95,0,0xeae9df,.21);
+ else if(k==='review-glass'||k==='review-rail'){
+  const isGlass=k==='review-glass',H=isGlass?(leafMode??2.95):1.05,metal=0x526462,parts=Math.max(1,Math.ceil(len/(isGlass?21:13)));
+  if(isGlass){
+   const pane=[xyz(x,y,.035),xyz(X,Y,.035),xyz(X,Y,H-.03),xyz(x,y,H-.03)];
+   face(trans,pane,0xa0c5c3,.14,1);
+  }
+  keepPlanLeaf=true;
+  for(const z of isGlass?[.025,H-.034]:[.12,.58,1.01])line(x,y,X,Y,.034,z,metal,.033);
+  for(let n=0;n<=parts;n++){const t=n/parts;box(x+(X-x)*t,y+(Y-y)*t,.035,.045,H,0,metal);}
+  keepPlanLeaf=false;
+ }
  else if(k==='window'){
   const sill=.93, top=2.26, frame=0x395960;
   line(x,y,X,Y,sill,0,0xeae9df,.22);
@@ -75,11 +91,13 @@ for(const [x,y,X,Y,k,leafMode,side=1] of walls){
    continue;
   }
   if(leafMode==='double'){
+   keepPlanLeaf=x===94&&(y===1045||y===1083);
    for(const [px,py,sgn] of [[x,y,1],[X,Y,-1]]){
     const o=a+Math.PI*.48*side*sgn+(sgn===1?0:Math.PI), L=len*.47, fx=px+Math.cos(o)*L/2,fy=py+Math.sin(o)*L/2;
     box(fx,fy,L*sc,.058,2.07,.041,leaf,o);
     box(px+Math.cos(o)*L*.86,py+Math.sin(o)*L*.86,.105,.12,.053,1.03,0x314346,o);
    }
+   keepPlanLeaf=false;
    continue;
   }
   // Door leaf shown open, with a visible edge and handle.
@@ -89,16 +107,18 @@ for(const [x,y,X,Y,k,leafMode,side=1] of walls){
   box(x+Math.cos(o)*len*.72,y+Math.sin(o)*len*.72,.13,.14,.05,1.02,0x314346,o);
  }
 }
+keepPlanLeaf=true; // Keep the original route marking over upgraded floors.
 for(let j=0;j<route.length-1;j++){
  const [x,y]=route[j],[X,Y]=route[j+1],d=Math.hypot(X-x,Y-y),ang=Math.atan2(Y-y,X-x);
  for(let t=0;t<d;t+=6){const len=Math.min(3.6,d-t);box(x+Math.cos(ang)*(t+len/2),y+Math.sin(ang)*(t+len/2),len*sc,.13,.015,.023,0xdc6947,ang)}
 }
+keepPlanLeaf=false;
 for(const x of [57,159,260,361,463,564,665])for(const y of [175,277,378,479,580,682,783,885,986,1088,1189,1290]){
  if(x>=564 && [580,783,986].includes(y)||x===665&&[885,1290].includes(y))continue;
  box(x,y,.56,.56,2.96,0,0x9ea9a5);
 }
 addCafeFinish({box,round,face,solid,xyz,sc,roof});
-addZoneSurfaces({box,round,line,roof,face,solid,xyz,sc});
+addZoneSurfaces({box,round,line,roof,face,solid,xyz,sc,wallPlan:walls});
 addZoneLights({box,round,line,roof,xyz,sc});
 const zoneTint=makeZoneTint(sc);
 for(const [pi,[k,x,y,ww,dd,deg=0]] of props.entries()){
@@ -163,19 +183,22 @@ for(const [pi,[k,x,y,ww,dd,deg=0]] of props.entries()){
   for(let i=0;i<12;i++)b(0,-d/2+(i+.5)*d/12,w,d/12+.008,.128*(i+1),0,0xb8bbb3)
  }else if(k==='pallet'){b(0,0,w,d,.13,0,wood);b(0,0,w*.82,d*.80,.55,.13,0xb49b73);}
 }
-const off=[];let total=0;route.forEach(([x,y],i)=>{if(i)total+=Math.hypot(x-route[i-1][0],y-route[i-1][1])*sc;off.push(total)});
-function at(t){t=Math.min(Math.max(0,t),total);let i=1;while(i<off.length-1&&off[i]<t)i++;const u=(t-off[i-1])/(off[i]-off[i-1]||1),a=route[i-1],b=route[i];return [a[0]+u*(b[0]-a[0]),a[1]+u*(b[1]-a[1])]}
-function where(x,y){let best=Infinity,t=0;route.forEach(([X,Y],i)=>{if(!i)return;const [a,b]=route[i-1],dx=X-a,dy=Y-b,u=Math.max(0,Math.min(1,((x-a)*dx+(y-b)*dy)/(dx*dx+dy*dy||1))),d=(x-a-u*dx)**2+(y-b-u*dy)**2;if(d<best){best=d;t=off[i-1]+u*(off[i]-off[i-1])}});return t}
+// Keep the last camera in the lift lobby, just in front of the closed cab.
+const walkRoute=route.map(([x,y],i)=>[x,i===route.length-1?y+20:y]);
+const off=[];let total=0;walkRoute.forEach(([x,y],i)=>{if(i)total+=Math.hypot(x-walkRoute[i-1][0],y-walkRoute[i-1][1])*sc;off.push(total)});
+function at(t){t=Math.min(Math.max(0,t),total);let i=1;while(i<off.length-1&&off[i]<t)i++;const u=(t-off[i-1])/(off[i]-off[i-1]||1),a=walkRoute[i-1],b=walkRoute[i];return [a[0]+u*(b[0]-a[0]),a[1]+u*(b[1]-a[1])]}
+function where(x,y){let best=Infinity,t=0;walkRoute.forEach(([X,Y],i)=>{if(!i)return;const [a,b]=walkRoute[i-1],dx=X-a,dy=Y-b,u=Math.max(0,Math.min(1,((x-a)*dx+(y-b)*dy)/(dx*dx+dy*dy||1))),d=(x-a-u*dx)**2+(y-b-u*dy)**2;if(d<best){best=d;t=off[i-1]+u*(off[i]-off[i-1])}});return t}
 let last=0;const times=stops.map(([,x,y])=>last=Math.max(last,where(x,y)));
 let dist=0,play=false,mode='walk',spin=.71,tilt=.86,zoom=125,yaw=0,pitch=0,heading=NaN,dirty=true,exact=-1;
 const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],unit=v=>v.map(x=>x/(Math.hypot(...v)||1)),dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0);
 function camera(eye,target){const f=unit(eye.map((x,i)=>x-target[i])),r=unit(cross([0,1,0],f)),u=cross(f,r); return [r[0],u[0],f[0],0,r[1],u[1],f[1],0,r[2],u[2],f[2],0,-dot(r,eye),-dot(u,eye),-dot(f,eye),1]}
 function projection(aspect){const n=.045,f=400,x=1/Math.tan((mode==='walk'?65:52)*Math.PI/360);return [x/aspect,0,0,0,0,x,0,0,0,0,(n+f)/(n-f),-1,0,0,2*f*n/(n-f),0]}
-const explore=id=>zoneViews[id];
-let cafeIndex=0,cafeLeg=null, cafeT=0;
+const explore=id=>id===21?{eye:[636,600],look:[636,538],pitch:-.03,hint:'景区广场观察点：从原红线看广场、北通道及两侧立面。'}:zoneViews[id];
+let cafeIndex=0,cafeLeg=null,cafeT=0,cafeGlassView=false;
 const isCafe=()=>exact>=0&&stops[exact][0]===14&&mode==='walk'&&!play;
 const cafeView=()=>{const v=cafeStops[cafeIndex];return [v.eye[0],v.eye[1],v.look[0],v.look[1]]};
 function cafeTransition(i){
+ if(cafeGlassView){cafeGlassView=false;cafeIndex=i;cafeLeg=null;yaw=pitch=0;dirty=true;sync();return;}
  if(cafeLeg||i===cafeIndex)return;
  const from=cafeIndex;
  const keys=[];
@@ -187,8 +210,9 @@ function cafeTransition(i){
  cafeLeg={poly,cum,end:cum.at(-1),lookFrom:cafeCamera().slice(2),lookTo:cafeStops[i].look,pitchFrom:cafeStops[from].pitch};
  cafeIndex=i;cafeT=0;yaw=pitch=0;dirty=true;sync();
 }
-function cafePitch(){const dest=cafeStops[cafeIndex].pitch;if(!cafeLeg)return dest;const t=Math.min(1,cafeT/(cafeLeg.end||1));return cafeLeg.pitchFrom+(dest-cafeLeg.pitchFrom)*t}
+function cafePitch(){if(cafeGlassView)return -.065;const dest=cafeStops[cafeIndex].pitch;if(!cafeLeg)return dest;const t=Math.min(1,cafeT/(cafeLeg.end||1));return cafeLeg.pitchFrom+(dest-cafeLeg.pitchFrom)*t}
 function cafeCamera(){
+ if(cafeGlassView)return [490,772,422,784];
  if(!cafeLeg)return cafeView();const {poly,cum,end,lookFrom,lookTo}=cafeLeg;
  let k=1;while(k<cum.length-1&&cum[k]<cafeT)k++;
  const q=Math.max(0,Math.min(1,(cafeT-cum[k-1])/(cum[k]-cum[k-1]||1))),u=Math.min(1,cafeT/(end||1)),h=u*u*(3-2*u);
@@ -198,14 +222,17 @@ const cControl=$('cafeControl');
 for(const [i,v] of cafeStops.entries()){
  const b=document.createElement('button');b.type='button';b.textContent=v.label;b.onclick=()=>cafeTransition(i);cControl.append(b);
 }
-let program,buffers=[];
+const glassLook=document.createElement('button');glassLook.type='button';glassLook.textContent='从走道看进咖啡厅';
+glassLook.onclick=()=>{cafeGlassView=true;cafeLeg=null;heading=NaN;yaw=pitch=0;dirty=true;sync();};cControl.append(glassLook);
+let program,buffers=[],setHiddenRects=()=>{},detailWorld=null,cpu=null,baseMeshes=null,layerState='';
 function init(){
  function sh(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s}
  program=gl.createProgram();
  gl.attachShader(program,sh(gl.VERTEX_SHADER,`attribute vec3 p;attribute vec4 c;uniform mat4 P,V;varying vec4 C;varying float fog;varying vec3 world;void main(){vec4 v=V*vec4(p,1.);gl_Position=P*v;C=c;world=p;fog=smoothstep(32.,125.,-v.z)*0.31;}`));
- gl.attachShader(program,sh(gl.FRAGMENT_SHADER,`precision mediump float;varying vec4 C;varying float fog;varying vec3 world;
+ gl.attachShader(program,sh(gl.FRAGMENT_SHADER,`precision highp float;varying vec4 C;varying float fog;varying vec3 world;
+ ${maskCode(BOX_LIMIT,'hideArea')}
  float pool(vec2 center){vec2 v=world.xz-center;float y=max(0.,2.36-world.y);float r=.54+y*.63;return exp(-2.6*dot(v,v)/(r*r))*(.32+.68*smoothstep(0.,1.4,y));}
- void main(){vec3 base=C.rgb;
+ void main(){if(hideAreaContains(world.xz))discard;vec3 base=C.rgb;
   if(world.x>-1.94&&world.x<6.06&&world.z>-4.61&&world.z<4.59){
    float e=smoothstep(-4.61,-3.9,world.z);
    float glow=min(1.,(pool(vec2(1.081,-.665))+pool(vec2(2.329,-.665))+pool(vec2(3.576,-.665)))*.68);
@@ -215,7 +242,8 @@ function init(){
   gl_FragColor=vec4(mix(base,vec3(.79,.87,.84),fog),C.a);
  }`));
  gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(program));gl.useProgram(program);
- buffers=[solid,ceiling,trans].map(data=>{
+ setHiddenRects=maskSetup(gl,program,'hideArea',BOX_LIMIT);
+ buffers=[solid,ceiling,trans,essential].map(data=>{
   const out=new Float32Array(data);
   for(let i=0;i<out.length;i+=7){
    const rgb=zoneTint(out[i],out[i+1],out[i+2],out[i+3],out[i+4],out[i+5]);
@@ -282,34 +310,55 @@ function draw(){
  if(!program&&!ctx)return;
  const W=cv.clientWidth,H=cv.clientHeight,p=Math.min(1.5,devicePixelRatio||1);
  if(program){if(cv.width!==Math.round(W*p)||cv.height!==Math.round(H*p)){cv.width=Math.round(W*p);cv.height=Math.round(H*p)}gl.viewport(0,0,cv.width,cv.height);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT)}
- else{if(canvas2.width!==Math.round(W)||canvas2.height!==Math.round(H)){canvas2.width=Math.round(W);canvas2.height=Math.round(H)}}
+ else if(!canvas2)return;
  const a=at(dist),q=at(Math.min(total,dist+2.4)),b=dist>total-1?at(Math.max(0,dist-1.6)):a;
  let eye,target;
  if(mode==='walk'){
-  const ang=Math.atan2(q[0]-b[0],q[1]-b[1]);if(!Number.isFinite(heading)||!play)heading=ang;else heading+=Math.atan2(Math.sin(ang-heading),Math.cos(ang-heading))*.145;
+  const ang=Math.atan2(q[0]-b[0],q[1]-b[1]);if(!Number.isFinite(heading))heading=ang;else if(play)heading+=Math.atan2(Math.sin(ang-heading),Math.cos(ang-heading))*.145;
   const cafe=isCafe(),v=exact>=0&&!play?explore(stops[exact][0]):null,
    p=cafe?cafeCamera():v?[...v.eye,...v.look]:null,viewPitch=pitch+(cafe?cafePitch():v?.pitch??0);
   if(p)heading=Math.atan2(p[2]-p[0],p[3]-p[1]);
   eye=p?xyz(p[0],p[1],1.62):xyz(...a,1.62);target=[eye[0]+Math.sin(heading+yaw)*Math.cos(viewPitch),eye[1]+Math.sin(viewPitch),eye[2]+Math.cos(heading+yaw)*Math.cos(viewPitch)];
  }else{eye=[Math.sin(spin)*zoom*Math.cos(tilt),Math.sin(tilt)*zoom,Math.cos(spin)*zoom*Math.cos(tilt)];target=[0,0,0]}
- const V=camera(eye,target);if(!program){fallback(W,H,V,eye);return}
- gl.uniformMatrix4fv(gl.getUniformLocation(program,'P'),false,projection(W/H));gl.uniformMatrix4fv(gl.getUniformLocation(program,'V'),false,V);
+ const layer=mode==='walk'?detailWorld?.select(eye[0],eye[2]):null;
+ const key=mode==='orbit'?'orbit':layer?.near?'detail':layer?.waiting?'loading':'base';
+ if(layerState!==key){layerState=key;cv.dataset.tourLayer=key;$('detailHint').textContent=({orbit:'全层布局 · 拖动旋转，滚轮缩放',detail:'精细装修已接入 · 沿原路线连续行进',loading:'正在加载前方精细装修，路线仍可走',base:'沿原路线行进；未接入的区段保留原模型'})[key];}
+ const V=camera(eye,target);
+ if(!program){
+  if(layer?.meshes?.length&&cpu){
+   cpu.draw({eye,target,fov:65,width:W,height:H,meshes:layer.meshes,baseMeshes,boxes:layer.boxes,quality:play||drag?'moving':'idle'});return;
+  }
+  if(canvas2.width!==Math.round(W)||canvas2.height!==Math.round(H)){canvas2.width=Math.round(W);canvas2.height=Math.round(H)}
+  fallback(W,H,V,eye);return;
+ }
+ const P=projection(W/H);
+ gl.useProgram(program);setHiddenRects(layer?.boxes??[]);
+ gl.uniformMatrix4fv(gl.getUniformLocation(program,'P'),false,P);gl.uniformMatrix4fv(gl.getUniformLocation(program,'V'),false,V);
  const pp=gl.getAttribLocation(program,'p'),cc=gl.getAttribLocation(program,'c');
- buffers.forEach(([v,n],i)=>{if(i===1&&mode!=='walk')return;if(i===2){gl.enable(gl.BLEND);gl.depthMask(false)}else{gl.disable(gl.BLEND);gl.depthMask(true)}gl.bindBuffer(gl.ARRAY_BUFFER,v);gl.enableVertexAttribArray(pp);gl.enableVertexAttribArray(cc);gl.vertexAttribPointer(pp,3,gl.FLOAT,false,28,0);gl.vertexAttribPointer(cc,4,gl.FLOAT,false,28,12);gl.drawArrays(gl.TRIANGLES,0,n)});gl.depthMask(true);
+ const base=(i)=>{const [v,n]=buffers[i];gl.bindBuffer(gl.ARRAY_BUFFER,v);gl.enableVertexAttribArray(pp);gl.enableVertexAttribArray(cc);gl.vertexAttribPointer(pp,3,gl.FLOAT,false,28,0);gl.vertexAttribPointer(cc,4,gl.FLOAT,false,28,12);gl.drawArrays(gl.TRIANGLES,0,n);};
+ gl.disable(gl.BLEND);gl.depthMask(true);base(0);if(mode==='walk')base(1);
+ if(layer?.rows.length)detailWorld.draw(layer.rows,P,V);
+ gl.useProgram(program);setHiddenRects([]);base(3);gl.enable(gl.BLEND);gl.depthMask(false);base(2);gl.depthMask(true);
 }
 function index(){if(exact>=0)return exact;let i=0;while(i<times.length-1&&times[i+1]<=dist+.35)i++;return i}
 function label([n,,,s]){return String(n).padStart(2,'0')+' · '+s}
 stops.forEach((s,i)=>$('jump').add(new Option(label(s),i)));
+$('fullRoam').onclick=()=>setMode('walk');
 const finishFile=n=>'finish-'+String(n).padStart(2,'0')+'.jpg';
 for(const item of finishes){
  const fig=document.createElement('figure');fig.className='finish-card';fig.dataset.new='true';
  const a=document.createElement('a');a.href=finishFile(item.id);a.target='_blank';a.rel='noopener';
  const im=document.createElement('img');im.src=a.href;im.alt=item.name+'装修效果图';im.loading='lazy';a.append(im);
- const fc=document.createElement('figcaption');const b=document.createElement('b');b.textContent=String(item.id).padStart(2,'0')+' · '+item.name;if(fig.dataset.new){const n=document.createElement('span');n.className='fresh';n.textContent='已加入 3D 漫游';b.append(n)}
+ const fc=document.createElement('figcaption');const b=document.createElement('b');b.textContent=String(item.id).padStart(2,'0')+' · '+item.name;if(fig.dataset.new){const n=document.createElement('span');n.className='fresh';n.textContent=item.id===17?'客房装修参考':'已加入 3D 漫游';b.append(n)}
  const p=document.createElement('p');p.textContent=item.note;
  const btn=document.createElement('button');btn.type='button';btn.textContent='在 3D 中查看';btn.onclick=()=>jumpTo(item.id);
  fc.append(b,p,btn);fig.append(a,fc);$('finishGrid').append(fig);
 }
+
+const mapMarks=$('routeMarks'),mapNS='http://www.w3.org/2000/svg';
+function mapMark(tag,attrs){const n=document.createElementNS(mapNS,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);mapMarks.append(n);return n;}
+mapMark('polyline',{points:route.map(p=>p.join(',')).join(' '),fill:'none',stroke:'#c26149','stroke-width':12,'stroke-linejoin':'round','stroke-linecap':'round',opacity:.85});
+for(const [n,x,y] of stops){mapMark('circle',{cx:x,cy:y,r:15,fill:'#fffdf7',stroke:'#8f4c3d','stroke-width':2.8});mapMark('text',{x,y:y+5,fill:'#4a2820','font-size':13,'font-weight':700,'text-anchor':'middle','font-family':'system-ui,sans-serif'}).textContent=String(n).padStart(2,'0');}
 function jumpTo(n){
  const i=stops.findIndex(v=>v[0]===n);if(i<0)return;
  setMode('walk');go(i);document.querySelector('main').scrollIntoView({block:'start'});
@@ -333,19 +382,24 @@ for(const [name,subtitle,...keys] of zones){
  panel.append(t,s,choices);$('stationGrid').append(panel);
 }
 let lastAudit=-1;
-function sync(){const i=index();if(i!==lastAudit){lastAudit=i;const n=stops[i][0];$('warehouseDetail').hidden=$('warehouseQuick').hidden=n!==8;$('finishNote').textContent=explore(n)?.hint??'木格栅、浅石台面、软包椅、暖吊灯；可选三处室内视角。';const v=finishes.find(x=>x.id===n);$('localFinish').hidden=!v;if(v){$('localFinishLink').href=finishFile(n);$('localFinishImg').src=finishFile(n);$('localFinishImg').alt=v.name+'装修效果图'}}$('now').textContent=label(stops[i]);$('jump').value=i;$('scrub').value=1000*dist/total;$('prev').disabled=i===0;$('next').disabled=i===stops.length-1;const caf=isCafe();cControl.hidden=!caf;cControl.querySelectorAll('button').forEach((b,j)=>b.setAttribute('aria-pressed',String(j===cafeIndex)));const [x,y]=caf?cafeCamera():mode==='walk'&&exact>=0&&!play?explore(stops[i][0])?.eye??at(dist):at(dist);$('dot').setAttribute('cx',x);$('dot').setAttribute('cy',y);$('play').textContent=play?'暂停漫游':dist>total-.05?'重新漫游':'开始漫游';$('modeTip').textContent=caf?'已加入软装与灯光 · 拖动看四周':mode==='walk'?(exact>=0?'本站实时布置 · 拖动看四周':'第一人称 · 沿红线行进'):'掀顶总览 · 拖动旋转／滚轮缩放';}
-function go(i){i=Math.max(0,Math.min(stops.length-1,i));dist=times[i];exact=i;play=false;cafeIndex=0;cafeLeg=null;yaw=pitch=0;heading=NaN;dirty=true;sync()}
-function toggle(){if(dist>total-.05){dist=0;heading=NaN}play=!play;exact=-1;cafeLeg=null;yaw=pitch=0;dirty=true;sync()}
+function sync(){const i=index();if(i!==lastAudit){lastAudit=i;const n=stops[i][0];$('finishNote').textContent=explore(n)?.hint??'木格栅、浅石台面、软包椅、暖吊灯；可选三处室内视角。';}$('now').textContent=label(stops[i]);$('jump').value=i;$('scrub').value=1000*dist/total;$('prev').disabled=i===0;$('next').disabled=i===stops.length-1;const caf=isCafe();cControl.hidden=!caf;cControl.querySelectorAll('button').forEach((b,j)=>b.setAttribute('aria-pressed',String(cafeGlassView?j===cafeStops.length:j===cafeIndex)));const [x,y]=caf?cafeCamera():mode==='walk'&&exact>=0&&!play?explore(stops[i][0])?.eye??at(dist):at(dist);$('dot').setAttribute('cx',x);$('dot').setAttribute('cy',y);$('play').textContent=play?'暂停漫游':dist>total-.05?'重新漫游':'开始漫游';$('modeTip').textContent=caf?'已加入软装与灯光 · 拖动看四周':mode==='walk'?(exact>=0?'本站实时布置 · 拖动看四周':'第一人称 · 沿红线行进'):'掀顶总览 · 拖动旋转／滚轮缩放';}
+function go(i){i=Math.max(0,Math.min(stops.length-1,i));dist=times[i];exact=i;play=false;cafeIndex=0;cafeLeg=null;cafeGlassView=false;yaw=pitch=0;heading=NaN;dirty=true;sync()}
+function toggle(){if(dist>total-.05){dist=0;heading=NaN}play=!play;if(play&&mode!=='walk')setMode('walk');exact=-1;cafeLeg=null;yaw=pitch=0;dirty=true;sync()}
 $('jump').onchange=e=>go(+e.target.value);$('prev').onclick=()=>go(index()-1);$('next').onclick=()=>go(index()+1);$('play').onclick=toggle;
 $('scrub').oninput=e=>{dist=total*e.target.value/1000;play=false;exact=-1;cafeLeg=null;heading=NaN;dirty=true;sync()};
-function setMode(m){mode=m;for(const v of ['walk','orbit'])$(v).setAttribute('aria-pressed',v===m);dirty=true;sync()}
+function setMode(m){mode=m;if(m==='orbit')play=false;for(const v of ['walk','orbit'])$(v).setAttribute('aria-pressed',v===m);dirty=true;sync()}
 for(const m of ['walk','orbit'])$(m).onclick=()=>setMode(m);
 let drag=null;
 cv.onpointerdown=e=>{cv.setPointerCapture(e.pointerId);drag=[e.clientX,e.clientY]};
-cv.onpointerup=cv.onpointercancel=()=>drag=null;
+cv.onpointerup=cv.onpointercancel=()=>{drag=null;dirty=true;};
 cv.onpointermove=e=>{if(!drag)return;const dx=e.clientX-drag[0],dy=e.clientY-drag[1];if(mode==='walk'){yaw-=dx*.006;pitch=Math.max(-1.1,Math.min(1.1,pitch+dy*.005))}else{spin-=dx*.009;tilt=Math.max(.33,Math.min(1.54,tilt+dy*.007))}drag=[e.clientX,e.clientY];dirty=true};
 cv.onwheel=e=>{if(mode!=='orbit')return;e.preventDefault();zoom=Math.max(28,Math.min(250,zoom*Math.exp(e.deltaY*.001)));dirty=true};
 window.addEventListener('resize',()=>dirty=true);
 window.addEventListener('keydown',e=>{if(/BUTTON|INPUT|SELECT/.test(e.target.tagName))return;if(e.code==='Space'){e.preventDefault();toggle()}else if(e.code==='ArrowRight')go(index()+1);else if(e.code==='ArrowLeft')go(index()-1)});
 try{if(!gl)throw Error('WebGL unavailable');init()}catch(e){console.warn(e.message);program=null;canvas2=document.createElement('canvas');canvas2.style.cssText='position:absolute;inset:0;pointer-events:none';cv.after(canvas2);ctx=canvas2.getContext('2d');if(ctx)faceBatches=makeFaceBatches();if(!ctx)$('warn').style.display='block'}
+try{
+ if(program)detailWorld=createDetailWorld(gl,()=>dirty=true);
+ else if(ctx){cpu=createUnifiedCPU(canvas2);baseMeshes=makeUnifiedBaseMeshes([solid,ceiling,trans,essential],zoneTint);detailWorld=createDetailWorld(null,()=>dirty=true);}
+}catch(e){console.warn('装修层未启用；保持原导览',e);}
+window.addEventListener('pagehide',e=>{if(!e.persisted){detailWorld?.dispose();cpu?.dispose();}});
 const startStation=Number(new URLSearchParams(location.search).get('station'));const startIndex=stops.findIndex(v=>v[0]===startStation);if(startIndex>=0)go(startIndex);else sync();let tm=0;function frame(t){const dt=Math.min(.075,(t-tm)/1000||0);tm=t;if(cafeLeg&&isCafe()){cafeT+=dt*2.85;if(cafeT>=cafeLeg.end)cafeLeg=null;const [x,y]=cafeCamera();$('dot').setAttribute('cx',x);$('dot').setAttribute('cy',y);dirty=true;}if(play){dist=Math.min(total,dist+dt*2.3);if(dist>=total)play=false;dirty=true;sync()}if(dirty){draw();dirty=false}requestAnimationFrame(frame)}requestAnimationFrame(frame);

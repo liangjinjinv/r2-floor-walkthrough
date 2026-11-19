@@ -1,5 +1,5 @@
-// Finishing proposal lighting. No shafts, openings, exterior trim or load-bearing geometry.
-// Each line is a luminaire design and its light falloff, neither verified lighting nor construction.
+
+
 const zones=[
  {bounds:[565,842,614,936], ceiling:0xe2dfd3, tone:[1,.98,.94], bars:[[586,862,586,904],[600,894,600,923]],kind:'linear'},
  {bounds:[565,936,705,1045], ceiling:0xe9ddce,tone:[1,.971,.921], bars:[[573,955,694,955],[574,982,695,982],[574,1012,694,1012]],kind:'recessed'},

@@ -1,5 +1,5 @@
-// C3 visual refinement. Centers, counts and floor footprints remain those of props.mjs.
-// Reference-render materials are proposals, not as-built evidence.
+
+
 const pal={dark:0x352d25,bronze:0x463d35,plinth:0x48372c,walnut:0xa26943,walnutLight:0xb88055,shadow:0x875638,woodEdge:0x9a6543,stone:0xe8ddc8,stoneEdge:0xd6c5aa,olive:0x7e885b,oliveShade:0x6f7953,oliveLight:0x8b956b,metal:0x9d9d92,stainless:0xbbbaae,ivory:0xf4ebd9};
 export function makeCafeProp(k,x,y,ww,dd,deg=0,api){
  const {box,round,sc}=api,{dark,bronze,plinth,walnut,walnutLight,shadow,woodEdge,stone,stoneEdge,olive,oliveShade,oliveLight,metal,stainless,ivory}=pal;
@@ -12,7 +12,7 @@ export function makeCafeProp(k,x,y,ww,dd,deg=0,api){
   b(0,0,w*.923,d*.82,.092,0,plinth);
   b(0,0,w*.956,d*.921,top-.145,.088,walnut);
   if(isBar){
-   // Flutes run across the front and rear within the original counter footprint.
+
    const n=Math.max(18,Math.round(w/.067));
    for(const dir of [-1,1]){
     b(0,dir*d*.459,w*.943,d*.036,.832,.132,shadow);
@@ -23,7 +23,7 @@ export function makeCafeProp(k,x,y,ww,dd,deg=0,api){
    }
    for(const dir of [-1,1])b(dir*w*.477,0,w*.036,d*.949,.828,.13,woodEdge);
   }else{
-   // Flush cabinet doors and low-profile pulls; only dress the drawn volumes.
+
    const n=Math.max(1,Math.round(w/.56));
    for(let i=0;i<n;i++){
     const u=w*.94*((i+.5)/n-.5);
@@ -35,7 +35,7 @@ export function makeCafeProp(k,x,y,ww,dd,deg=0,api){
   return true;
  }
  if(k==='coffee'){
-  // This existing tuple is the espresso appliance, not a second floor object.
+
   const W=w,D=d,z=1.073;
   b(0,0,W*.88,D*.90,.038,z,bronze);
   b(0,-D*.046,W*.92,D*.76,.258,z+.054,stainless);
@@ -53,7 +53,7 @@ export function makeCafeProp(k,x,y,ww,dd,deg=0,api){
   return true;
  }
  if(k==='chair'){
-  // Upholstered seat/back and slim metal legs, conservative geometry within the envelope.
+
   const leg=Math.min(w,d)*.073;
   for(const i of [-.337,.337])for(const j of [-.335,.335]){
    r(w*i,d*j,leg*.51,leg*.51,.411,0,bronze,8);

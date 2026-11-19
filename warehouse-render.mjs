@@ -60,7 +60,7 @@ async function imageData(url,base,signal){
  return {image,width:image.width,height:image.height,pixels:ctx.getImageData(0,0,c.width,c.height).data};
 }
 
-async function loadScene(assetUrl,signal){
+export async function loadScene(assetUrl,signal){
  const base=new URL(assetUrl,document.baseURI),response=await fetch(base,{signal});
  if(!response.ok)throw new Error(`场景加载失败 (${response.status})。`);
  const scene=await response.json();
@@ -139,8 +139,8 @@ function makeGL(canvas,scene){
   const source=material.texture;
   if(textures.has(source))continue;
   const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);
-  // ImageBitmap ignores UNPACK_FLIP_Y_WEBGL on some implementations. Upload
-  // via its decoded RGBA pixels and explicitly orient rows for parity with CPU.
+
+
   if(source){
    const pixels=source.pixels;
    if(scene.uvOrigin!=='top-left'){
@@ -181,7 +181,9 @@ function boundsVisible(bounds,eye,r,u,f,tanX,tanY){
  }return !out.some(Boolean);
 }
 
-function makeSoftware(canvas,scene){
+
+
+export function makeSoftware(canvas,scene){
  const ctx=canvas.getContext('2d',{alpha:false});
  if(!ctx)throw new Error('此浏览器既没有 WebGL，也没有可用的 Canvas 2D。');
  let buffer,depth,width=0,height=0;
@@ -190,17 +192,31 @@ function makeSoftware(canvas,scene){
   const bg=scene.background||[.72,.74,.72],bg32=(255<<24)|((bg[2]*255)<<16)|((bg[1]*255)<<8)|(bg[0]*255);
   new Uint32Array(buffer.data.buffer).fill(bg32);depth.fill(0);
   const pixels=buffer.data,{r,u,f}=basis(camera),eye=camera.eye,tanY=Math.tan(fov*Math.PI/360),tanX=tanY*width/height,scale=height/(2*tanY),hw=width/2,hh=height/2;
-  const transformed=new Float32Array(24);
+  const transformed=new Float32Array(27),passes=[],transparent=[];
   for(const mesh of scene.meshes){
    if(!boundsVisible(mesh.bounds,eye,r,u,f,tanX,tanY))continue;
-   const data=mesh.data,texture=mesh.material.texture,base=mesh.material.color;
-   for(let o=0;o<data.length;o+=24){
+   const opacity=clamp(mesh.opacity??mesh.material.opacity??1,0,1);
+   if(opacity<=0)continue;
+   if(opacity<1||mesh.vertexAlpha){
+    const d=mesh.data;
+    for(let o=0;o<d.length;o+=24){
+     const x=(d[o]+d[o+8]+d[o+16])/3-eye[0],y=(d[o+1]+d[o+9]+d[o+17])/3-eye[1],z=(d[o+2]+d[o+10]+d[o+18])/3-eye[2];
+     transparent.push({mesh,start:o,end:o+24,opacity,blend:true,distance:x*f[0]+y*f[1]+z*f[2]});
+    }
+   }else passes.push({mesh,start:0,end:mesh.data.length,opacity,blend:false});
+  }
+  transparent.sort((a,b)=>b.distance-a.distance);
+  for(const pass of transparent)passes.push(pass);
+  for(const {mesh,start,end,opacity,blend} of passes){
+   const data=mesh.data,texture=mesh.material.texture,base=mesh.material.color,alpha=mesh.vertexAlpha;
+   for(let o=start;o<end;o+=24){
     let behind=0;const triangle=[];
     for(let j=0;j<3;j++){
-     const s=o+j*8,x=data[s]-eye[0],y=data[s+1]-eye[1],z=data[s+2]-eye[2],n=j*8;
+     const s=o+j*8,x=data[s]-eye[0],y=data[s+1]-eye[1],z=data[s+2]-eye[2],n=j*9;
      transformed[n]=x*r[0]+y*r[1]+z*r[2];transformed[n+1]=x*u[0]+y*u[1]+z*u[2];transformed[n+2]=x*f[0]+y*f[1]+z*f[2];
      if(transformed[n+2]<.045)behind++;
-     for(let k=3;k<8;k++)transformed[n+k]=data[s+k];triangle.push(transformed.subarray(n,n+8));
+     for(let k=3;k<8;k++)transformed[n+k]=data[s+k];
+     transformed[n+8]=alpha?clamp(alpha[s/8],0,1):1;triangle.push(transformed.subarray(n,n+9));
     }
     if(behind===3)continue;
     const poly=behind?nearClip(triangle,.045):triangle;
@@ -210,6 +226,12 @@ function makeSoftware(canvas,scene){
      const minX=Math.max(0,Math.floor(Math.min(...sx))),maxX=Math.min(width-1,Math.ceil(Math.max(...sx))),minY=Math.max(0,Math.floor(Math.min(...sy))),maxY=Math.min(height-1,Math.ceil(Math.max(...sy)));
      if(minX>maxX||minY>maxY)continue;
      const area=(sx[1]-sx[0])*(sy[2]-sy[0])-(sy[1]-sy[0])*(sx[2]-sx[0]);if(Math.abs(area)<.00001)continue;
+
+
+     const sign=area>0?1:-1;
+     const top0=(sy[2]-sy[1])*sign<0||((sy[2]-sy[1])===0&&(sx[2]-sx[1])*sign>0),
+      top1=(sy[0]-sy[2])*sign<0||((sy[0]-sy[2])===0&&(sx[0]-sx[2])*sign>0),
+      top2=(sy[1]-sy[0])*sign<0||((sy[1]-sy[0])===0&&(sx[1]-sx[0])*sign>0);
      const ix=1/area,bx0=(sy[1]-sy[2])*ix,by0=(sx[2]-sx[1])*ix,bx1=(sy[2]-sy[0])*ix,by1=(sx[0]-sx[2])*ix;
      let row0=((sx[1]-(minX+.5))*(sy[2]-(minY+.5))-(sy[1]-(minY+.5))*(sx[2]-(minX+.5)))*ix;
      let row1=((sx[2]-(minX+.5))*(sy[0]-(minY+.5))-(sy[2]-(minY+.5))*(sx[0]-(minX+.5)))*ix;
@@ -218,8 +240,14 @@ function makeSoftware(canvas,scene){
       let a=row0,b=row1,index=y*width+minX;
       for(let x=minX;x<=maxX;x++,a+=bx0,b+=bx1,index++){
        const c=1-a-b;if(a<-.000001||b<-.000001||c<-.000001)continue;
+       if(blend&&((Math.abs(a)<=.000001&&!top0)||(Math.abs(b)<=.000001&&!top1)||(Math.abs(c)<=.000001&&!top2)))continue;
        const aq=a*q[0],bq=b*q[1],cq=c*q[2],z=aq+bq+cq;if(z<=depth[index])continue;
-       depth[index]=z;const inv=1/z,po=index*4;
+       const inv=1/z;
+       if(mesh.discardAt){const px=(x+.5-hw)/scale*inv,py=(hh-y-.5)/scale*inv;
+        if(mesh.discardAt(eye[0]+r[0]*px+u[0]*py+f[0]*inv,eye[1]+r[1]*px+u[1]*py+f[1]*inv,eye[2]+r[2]*px+u[2]*py+f[2]*inv))continue;}
+       const coverage=blend?opacity*(alpha?clamp((aq*v0[8]+bq*v1[8]+cq*v2[8])*inv,0,1):1):1;
+       if(coverage<=0)continue;
+       if(!blend)depth[index]=z;const po=index*4;
        let red=255,green=255,blue=255;
        if(texture){
         const U=clamp((aq*v0[3]+bq*v1[3]+cq*v2[3])*inv,0,1),V=clamp((aq*v0[4]+bq*v1[4]+cq*v2[4])*inv,0,1),fx=U*(texture.width-1),fy=(scene.uvOrigin==='top-left'?V:1-V)*(texture.height-1);
@@ -229,7 +257,11 @@ function makeSoftware(canvas,scene){
          red=t[pos]*w0+t[p1]*w1+t[p2]*w2+t[p3]*w3;green=t[pos+1]*w0+t[p1+1]*w1+t[p2+1]*w2+t[p3+1]*w3;blue=t[pos+2]*w0+t[p1+2]*w1+t[p2+2]*w2+t[p3+2]*w3;
         }else{red=t[pos];green=t[pos+1];blue=t[pos+2];}
        }
-       pixels[po]=red*base[0]*(aq*v0[5]+bq*v1[5]+cq*v2[5])*inv;pixels[po+1]=green*base[1]*(aq*v0[6]+bq*v1[6]+cq*v2[6])*inv;pixels[po+2]=blue*base[2]*(aq*v0[7]+bq*v1[7]+cq*v2[7])*inv;
+       red*=base[0]*(aq*v0[5]+bq*v1[5]+cq*v2[5])*inv;
+       green*=base[1]*(aq*v0[6]+bq*v1[6]+cq*v2[6])*inv;
+       blue*=base[2]*(aq*v0[7]+bq*v1[7]+cq*v2[7])*inv;
+       if(blend){const rest=1-coverage;pixels[po]=red*coverage+pixels[po]*rest;pixels[po+1]=green*coverage+pixels[po+1]*rest;pixels[po+2]=blue*coverage+pixels[po+2]*rest;}
+       else{pixels[po]=red;pixels[po+1]=green;pixels[po+2]=blue;}
       }
      }
     }
@@ -249,8 +281,8 @@ function collisionIndex(scene,eyeY,radius){
  if(Array.isArray(scene.collisionBoxes)){
   for(const box of scene.collisionBoxes){const a=box.min,b=box.max;if(a[1]>=eyeY+.18||b[1]<=footY)continue;add([[a[0],a[2]],[b[0],a[2]],[b[0],b[2]],[a[0],b[2]]]);}
  }else{
-  // Conservative capsule footprint from real geometry. Horizontal floor and
-  // overhead triangles are excluded; shelves/walls/counters remain obstacles.
+
+
   for(const mesh of scene.meshes){if(!mesh.collision)continue;const d=mesh.data;for(let i=0;i<d.length;i+=24){const ys=[d[i+1],d[i+9],d[i+17]];if(Math.min(...ys)>=eyeY+.18||Math.max(...ys)<=footY)continue;add([[d[i],d[i+2]],[d[i+8],d[i+10]],[d[i+16],d[i+18]]]);}}
  }
  const bounds=scene.walkBounds||{min,max};
@@ -272,7 +304,8 @@ export async function createWarehouseRenderer(canvas,options={}){
  if(!(canvas instanceof HTMLCanvasElement))throw new Error('需要一个 canvas 元素。');
  const status=message=>options.onStatus?.(message),controller=new AbortController();
  if(options.signal){if(options.signal.aborted)controller.abort();else options.signal.addEventListener('abort',()=>controller.abort(),{once:true});}
- status('正在加载 08 前置仓三维网格与烘焙光照贴图…');
+ const sceneLabel=options.sceneLabel||'08 前置仓';
+ status(`正在加载 ${sceneLabel}三维网格与烘焙光照贴图…`);
  const scene=await loadScene(options.assetUrl||'warehouse-assets/scene.json',controller.signal);
  const presets=(scene.presets?.length?scene.presets:[scene.spawn||scene.camera]).filter(Boolean);
  if(!presets.length)throw new Error('场景没有安全的初始相机。');
@@ -280,12 +313,12 @@ export async function createWarehouseRenderer(canvas,options={}){
  const collisions=collisionIndex(scene,camera.eye[1],options.radius||.22);
  if(!collisions.clear(camera.eye[0],camera.eye[2]))throw new Error('资产初始相机在碰撞区内；请修正预设，不能穿墙开始漫游。');
  try{engine=makeGL(surface,scene);}catch(error){
-  // A canvas that has already acquired a GL context cannot acquire 2D.
+
   const next=surface.cloneNode(false);surface.replaceWith(next);surface=next;
   status('WebGL 初始化失败，正在切换真实三角网格的软件渲染。');
  }
  if(!engine)engine=makeSoftware(surface,scene);
- surface.tabIndex=surface.tabIndex<0?0:surface.tabIndex;surface.style.touchAction='none';surface.setAttribute('aria-label','08 前置仓三维漫游。WASD 或方向键移动，拖拽转头。');
+ surface.tabIndex=surface.tabIndex<0?0:surface.tabIndex;surface.style.touchAction='none';surface.setAttribute('aria-label',`${sceneLabel}三维漫游。WASD 或方向键移动，拖拽转头。`);
  const keys=new Set(),keyboardKeys=new Set(),buttonKeys=new Set(),listeners=[],listen=(obj,type,fn,opts)=>{obj.addEventListener(type,fn,opts);listeners.push(()=>obj.removeEventListener(type,fn,opts));};
  let dead=false,contextLost=false,dirty=true,last=performance.now(),lastDraw=0,lastChange=last,hq=false,frame=0,pointer=null;
  const fov=clamp(options.fov||scene.fov||62,35,90),software=engine.mode==='software';
@@ -302,14 +335,14 @@ export async function createWarehouseRenderer(canvas,options={}){
  function setCamera(value){
   const next=cameraFrom(value);
   if(Math.abs(next.eye[1]-camera.eye[1])>.2||!collisions.clear(next.eye[0],next.eye[2])){status('该观察点不在当前安全步行区域，已保留原位置。');return false;}
-  camera=next;clearInput();return true;
+  camera=next;clearInput();options.onPosition?.(camera.eye[0],camera.eye[2]);return true;
  }
  function getCamera(){const {f}=basis(camera);return {eye:[...camera.eye],target:camera.eye.map((v,i)=>v+f[i]),yaw:camera.yaw,pitch:camera.pitch};}
  function setPreset(index){const value=presets[index];return value?setCamera(value):false;}
  listen(surface,'keydown',event=>{if(MOVE.has(event.code)){event.preventDefault();setInput(event.code,true,true);}});
  listen(surface,'keyup',event=>{if(MOVE.has(event.code)){event.preventDefault();setInput(event.code,false,true);}});
- // Clicking a held movement button may blur the canvas. Only physical keys
- // should be released then; externally held buttons remain active until up.
+
+
  listen(surface,'blur',()=>{keyboardKeys.clear();syncInput();});listen(window,'blur',clearInput);
  listen(surface,'pointerdown',event=>{if(event.button!==0||pointer)return;surface.focus({preventScroll:true});pointer={id:event.pointerId,x:event.clientX,y:event.clientY};surface.setPointerCapture(event.pointerId);event.preventDefault();});
  listen(surface,'pointermove',event=>{if(!pointer||event.pointerId!==pointer.id)return;camera.yaw=(camera.yaw+(event.clientX-pointer.x)*.004)%TAU;camera.pitch=clamp(camera.pitch-(event.clientY-pointer.y)*.0035,-1.15,1.15);pointer.x=event.clientX;pointer.y=event.clientY;invalidate();});
@@ -324,8 +357,8 @@ export async function createWarehouseRenderer(canvas,options={}){
   if(dead)return;const dt=Math.min(.12,(now-last)/1000);last=now;
   let ahead=(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0),side=(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0);
   if(!contextLost&&(ahead||side)){const length=Math.hypot(ahead,side),speed=(keys.has('ShiftLeft')||keys.has('ShiftRight')?2.1:1.25)*dt/length,s=Math.sin(camera.yaw),c=Math.cos(camera.yaw),dx=(ahead*s+side*c)*speed,dz=(-ahead*c+side*s)*speed;
-   // Axis sliding plus substeps prevents wall tunneling and eases aisle turns.
-   const n=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.07));for(let i=0;i<n;i++){if(collisions.clear(camera.eye[0]+dx/n,camera.eye[2]))camera.eye[0]+=dx/n;if(collisions.clear(camera.eye[0],camera.eye[2]+dz/n))camera.eye[2]+=dz/n;}invalidate();
+
+   const n=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.07));for(let i=0;i<n;i++){if(collisions.clear(camera.eye[0]+dx/n,camera.eye[2]))camera.eye[0]+=dx/n;if(collisions.clear(camera.eye[0],camera.eye[2]+dz/n))camera.eye[2]+=dz/n;}options.onPosition?.(camera.eye[0],camera.eye[2]);invalidate();
   }
   const idle=!keys.size&&!pointer&&now-lastChange>220;
   if(!contextLost&&((dirty&&(!software||now-lastDraw>65))||(software&&idle&&!hq))){

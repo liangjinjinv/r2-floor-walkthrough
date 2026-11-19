@@ -1,5 +1,5 @@
-// Lightweight decor/fixture catalogue for the R2 plan. Use only after C3 overrides.
-// Dimensions below are fractional to contain each object in its plan footprint.
+
+
 const C={oak:0xa87347,oakTop:0xc09463,flute:0xb67e50,darkOak:0x80593e,cream:0xe9dcbe,edge:0xc7b28e,sage:0x818965,teal:0x4f6663,blue:0x5c7583,gray:0x68716f,zinc:0x969a92,black:0x363c37,ink:0x282f31,white:0xeae8da,linen:0xc8b698,kraft:0xbb986b,light:0xf0d7a8,bronze:0x5d4c3d};
 export function makeZoneProp(k,x,y,ww,dd,deg=0,{box,round,sc}){
  const w=ww*sc,d=dd*sc,a=deg*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
@@ -13,7 +13,7 @@ export function makeZoneProp(k,x,y,ww,dd,deg=0,{box,round,sc}){
  const hospitality=lobby||gallery||hotel||store;
  const wood=hospitality?C.oak:C.zinc, top=hospitality?C.cream:C.zinc;
  const slim=(u,v,W,D,h,z,col)=>{
-   // Rotate portrait footprints so screen or cabinet spans the long axis.
+
    if(d>w*1.35)b(v,u,D,W,h,z,col);else b(u,v,W,D,h,z,col);
  };
  if(k==='reception'||k==='counter'){
@@ -27,7 +27,7 @@ export function makeZoneProp(k,x,y,ww,dd,deg=0,{box,round,sc}){
     const n0=k==='reception'?Math.min(54,n*2):n;
     for(let i=0;i<n0;i++)slim((i+.5)/n0*.91-.455,sign*.466,.55/n0,.052,ht-.24,.125,C.flute);
    }
-   // A console, control screen and register sit on the drawn desk; not new floor items.
+
    if(k==='reception'||store){
     slim(-.27,-.09,.19,.41,.025,ht,C.bronze);
     slim(-.27,-.13,.13,.13,.045,ht+.025,C.black);
@@ -47,7 +47,7 @@ export function makeZoneProp(k,x,y,ww,dd,deg=0,{box,round,sc}){
   if(!heavy)b(0,-.47,.93,.058,h*.95,.05,store?C.gray:C.linen);
   for(const f of [.11,.36,.61,.86]){
    b(0,0,.988,.98,.048,h*f,shelf);
-   // Goods are deliberately unbranded, and never go past shelf edges.
+
    for(const [i,j] of [[-.29,0],[0,1],[.29,2]]){
     const item=.12+j*.033;
     b(i,-.012,.18,.55,item,h*f+.048,(j+(Math.round(x)+Math.round(y))%3)%3===1?C.sage:j===2?C.white:C.kraft);
@@ -63,7 +63,7 @@ export function makeZoneProp(k,x,y,ww,dd,deg=0,{box,round,sc}){
   slim(0,0,.96,.93,.088,0,C.black);
   slim(0,0,board? .92:.76,board?.48:.63,h-.09,.088,casing);
   slim(0,.29,board?.81:.62,.109,h*.56,h*.35,C.ink);
-  // A subtle in-scene panel graphic built with shallow relief.
+
   slim(0,.356,board?.75:.51,.017,h*.073,h*.80,C.light);
   for(const i of [.48,.56,.64])slim(0,.356,board?.55:.34,.015,h*.023,h*i,board?C.zinc:C.teal);
   if(board&&(performance||gallery)){
@@ -129,7 +129,7 @@ export function makeZoneProp(k,x,y,ww,dd,deg=0,{box,round,sc}){
   return true;
  }
  if(k==='machine'&&!(w>6.5)){
-  // An enclosed generic industrial unit, with controls, not a vendor-specific reconstruction.
+
   const h=industry?.81:.94;
   b(0,0,.95,.86,.095,0,C.ink);b(0,0,.93,.91,h-.08,.08,C.gray);
   b(0,0,.99,.97,.054,h-.054,C.zinc);
